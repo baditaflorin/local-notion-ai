@@ -24,4 +24,3 @@ All private data and AI processing stay in the browser.
 ## Alternatives Considered
 
 - Pages frontend plus Docker backend: rejected by ADR 0001.
-

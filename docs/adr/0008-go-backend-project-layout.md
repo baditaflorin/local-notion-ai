@@ -21,4 +21,3 @@ Skip the Go backend entirely in v1. No `cmd/`, `internal/`, `pkg/`, `api/`, or D
 ## Alternatives Considered
 
 - Empty Go folders: rejected because they imply a backend that does not exist.
-

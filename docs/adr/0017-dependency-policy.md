@@ -29,4 +29,3 @@ Keep model/WASM dependencies lazy and explicitly justified before adding them.
 
 - Hand-written search and validation: rejected where maintained libraries are available.
 - Large LLM packages at startup: rejected by the asset budget.
-

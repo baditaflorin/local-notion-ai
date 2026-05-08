@@ -26,4 +26,3 @@ Use:
 
 - GitHub Actions: explicitly excluded.
 - Browser-only manual QA: insufficient for repeated releases.
-

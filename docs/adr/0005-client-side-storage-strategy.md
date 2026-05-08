@@ -23,4 +23,3 @@ Use IndexedDB for durable persistence, with Yjs as the in-memory workspace model
 - OPFS: useful for larger binary stores but less necessary for text v1.
 - localStorage: too small and synchronous for document bodies.
 - Runtime database: rejected by Mode A.
-

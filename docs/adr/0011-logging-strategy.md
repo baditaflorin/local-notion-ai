@@ -20,4 +20,3 @@ Production builds avoid routine console logging. Errors are surfaced to users th
 ## Alternatives Considered
 
 - Client log shipping: rejected because it adds analytics-like behavior and privacy concerns.
-

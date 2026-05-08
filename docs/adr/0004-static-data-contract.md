@@ -28,4 +28,3 @@ User documents are not static data. They live in IndexedDB and can be exported a
 
 - Commit user data artifacts: rejected because documents are private.
 - Release-hosted SQLite/Parquet: unnecessary for v1.
-

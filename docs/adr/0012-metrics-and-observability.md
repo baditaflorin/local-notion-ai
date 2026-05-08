@@ -21,4 +21,3 @@ Ship no analytics in v1. Observability is limited to local UI status: document c
 
 - Plausible analytics: privacy-friendly but still unnecessary for v1.
 - Custom beacon: rejected because it would create a backend-like concern.
-

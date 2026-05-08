@@ -15,4 +15,3 @@ make smoke
 Use Conventional Commits for commit messages, for example `feat: add local qa workflow`.
 
 Never commit secrets, real `.env` files, private keys, or credentials.
-

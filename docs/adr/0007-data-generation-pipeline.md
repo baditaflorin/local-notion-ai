@@ -21,4 +21,3 @@ Do not create a static data generation pipeline in v1. All user data is imported
 ## Alternatives Considered
 
 - Sample-data pipeline: rejected because it would distract from the private local workspace flow.
-

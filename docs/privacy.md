@@ -11,4 +11,3 @@ External links in the app:
 https://github.com/baditaflorin/local-notion-ai
 
 https://www.paypal.com/paypalme/florinbadita
-

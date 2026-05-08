@@ -42,4 +42,3 @@ https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pag
 - GitHub Pages does not support custom `_headers` or `_redirects`.
 - SPA fallback is handled by `docs/404.html`.
 - Service worker scope must stay under `/local-notion-ai/`.
-

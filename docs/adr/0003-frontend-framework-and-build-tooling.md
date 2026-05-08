@@ -25,4 +25,3 @@ Preact gives React-style components with a smaller runtime. Vite handles fast de
 - React: familiar, but larger than needed for v1.
 - Vanilla TypeScript only: smaller, but UI state would become harder to maintain.
 - Svelte: strong option, but Preact better matches the broader ecosystem for this project.
-

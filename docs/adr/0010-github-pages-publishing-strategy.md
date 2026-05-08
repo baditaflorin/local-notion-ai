@@ -28,4 +28,3 @@ Do not gitignore `docs/`. Do gitignore transient `dist/` and dependency folders.
 
 - `gh-pages` branch: rejected because it adds branch choreography without CI.
 - Root publishing: rejected because source and built assets would collide.
-

@@ -29,4 +29,3 @@ Commit `.env.example` with placeholders. Ignore `.env*` except `.env.example`. R
 
 - Runtime config endpoint: rejected because Mode A has no backend.
 - Hardcoded commit/version: rejected because release metadata should be generated during build.
-

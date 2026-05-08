@@ -22,4 +22,3 @@ Use typed `Result`-like return values or thrown `Error` objects at module bounda
 
 - Silent failures: rejected.
 - Raw stack traces in UI: rejected.
-

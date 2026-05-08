@@ -26,4 +26,3 @@ The app is a static frontend published from `main` `/docs`. User documents are i
 
 - Mode B with pre-built artifacts: rejected because user documents are private and imported locally, so there is no shared dataset to precompute.
 - Mode C with Docker backend: rejected because v1 has no cross-device sync, auth, secrets, or runtime mutations that require a server.
-

@@ -29,4 +29,3 @@ Use a browser-only architecture with these boundaries:
 
 - Monolithic app file: simpler initially but harder to test and evolve.
 - Server API module boundary: unnecessary for Mode A.
-

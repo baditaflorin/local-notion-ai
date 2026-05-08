@@ -27,4 +27,3 @@ Do not load WASM on first release. Implement v1 with JavaScript modules and clea
 
 - Transformers.js on first load: rejected because model payloads violate the initial asset budget.
 - Pandoc WASM: rejected for v1 due to size and Pages header constraints.
-

@@ -46,4 +46,3 @@ C4Container
 ```
 
 See the ADRs in `docs/adr/` for decision history.
-
