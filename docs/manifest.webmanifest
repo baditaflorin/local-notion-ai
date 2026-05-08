@@ -1,0 +1,18 @@
+{
+  "name": "local-notion-ai",
+  "short_name": "local-notion-ai",
+  "description": "Offline-first Notion AI alternative for summarizing, rewriting, and querying your local workspace.",
+  "start_url": "/local-notion-ai/",
+  "scope": "/local-notion-ai/",
+  "display": "standalone",
+  "background_color": "#f8f5ef",
+  "theme_color": "#246b5c",
+  "icons": [
+    {
+      "src": "/local-notion-ai/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

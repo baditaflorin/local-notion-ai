@@ -20,6 +20,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 coverage/
+playwright-report/
+test-results/
 
 # Go
 bin/
@@ -36,4 +38,3 @@ dist/
 dist-data/
 tmp/
 *.log
-

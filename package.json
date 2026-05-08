@@ -1,0 +1,47 @@
+{
+  "name": "local-notion-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first Notion AI alternative for summarizing, rewriting, and querying your local workspace.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --max-warnings=0",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "pages-preview": "node scripts/serve-pages.mjs",
+    "smoke": "bash scripts/smoke.sh",
+    "audit": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.2.2",
+    "lucide-preact": "^0.468.0",
+    "minisearch": "^7.1.0",
+    "preact": "^10.25.1",
+    "yjs": "^13.6.20",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.49.1",
+    "@preact/preset-vite": "^2.9.3",
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^22.10.2",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.49",
+    "prettier": "^3.4.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}
