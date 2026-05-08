@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>local-notion-ai</title>
+    <script>
+      const path = window.location.pathname;
+      const base = "/local-notion-ai/";
+      if (path.startsWith(base)) {
+        window.location.replace(base + "#" + path.slice(base.length));
+      } else {
+        window.location.replace(base);
+      }
+    </script>
+  </head>
+  <body>
+    <a href="/local-notion-ai/">Open local-notion-ai</a>
+  </body>
+</html>
+
