@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { analyzeDocumentInput } from "../../src/features/analysis/documentAnalysis";
 import { answerQuestion, summarizeDocuments } from "../../src/features/ai/nlp";
 import {
@@ -11,17 +12,17 @@ import {
 
 const fixturesDir = path.join(process.cwd(), "tests/fixtures/realdata");
 
-type FixtureExpectation = {
-  kind?: string;
-  minConfidence?: number;
-  normalizedIncludes?: string[];
-  warningsIncludeCodes?: string[];
-  summaryIncludes?: string[];
-  question?: string;
-  answerIncludes?: string[];
-  errorTitle?: string;
-  errorIncludes?: string[];
-};
+const fixtureExpectationSchema = z.object({
+  kind: z.string().optional(),
+  minConfidence: z.number().optional(),
+  normalizedIncludes: z.array(z.string()).optional(),
+  warningsIncludeCodes: z.array(z.string()).optional(),
+  summaryIncludes: z.array(z.string()).optional(),
+  question: z.string().optional(),
+  answerIncludes: z.array(z.string()).optional(),
+  errorTitle: z.string().optional(),
+  errorIncludes: z.array(z.string()).optional()
+});
 
 function baseName(fileName: string): string {
   return fileName.replace(/\.expected\.json$/, "").replace(/\.[^.]+$/, "");
@@ -37,9 +38,9 @@ describe("real-data fixtures", () => {
     );
 
     it(`handles ${fixtureName} deterministically`, () => {
-      const expectation = JSON.parse(
-        readFileSync(path.join(fixturesDir, expectedFile), "utf8")
-      ) as FixtureExpectation;
+      const expectation = fixtureExpectationSchema.parse(
+        JSON.parse(readFileSync(path.join(fixturesDir, expectedFile), "utf8"))
+      );
       const sourcePath = path.join(fixturesDir, fixturePath!);
       const raw = readFileSync(sourcePath, "utf8");
 

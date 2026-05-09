@@ -65,6 +65,10 @@ function importError(title: string, why: string, nextStep: string): Error {
   return error;
 }
 
+function importErrorFromDetail(detail: ImportError): Error {
+  return importError(detail.title, detail.why, detail.nextStep);
+}
+
 export function describeImportError(error: unknown): ImportError {
   const detail =
     typeof error === "object" && error !== null && "detail" in error
@@ -87,50 +91,91 @@ export async function documentsFromFiles(
     signal?: AbortSignal;
   }
 ): Promise<DocumentRecord[]> {
+  const result = await documentsFromFilesPartial(files, options);
+  if (result.failures.length > 0) {
+    throw importErrorFromDetail(result.failures[0].detail);
+  }
+
+  return result.documents;
+}
+
+export type FileImportFailure = {
+  fileName: string;
+  detail: ImportError;
+};
+
+export type FileImportBatch = {
+  documents: DocumentRecord[];
+  failures: FileImportFailure[];
+};
+
+async function documentFromFile(file: File): Promise<DocumentRecord> {
+  if (file.size === 0) {
+    throw importError(
+      "The file was empty.",
+      `${file.name} had no readable text content.`,
+      "Pick a file that contains text, or export a supported text representation first."
+    );
+  }
+
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".pdf")) {
+    throw importError(
+      "PDF import is not supported in v2 substance.",
+      `${file.name} is a binary PDF, and the local app only analyzes text-like formats directly.`,
+      "Extract the PDF text first, then import the extracted text or markdown."
+    );
+  }
+
+  const content = await file.text();
+  if (!content.trim()) {
+    throw importError(
+      "The file had no readable text after decoding.",
+      `${file.name} decoded to empty or whitespace-only content.`,
+      "Check the file encoding or export the source as UTF-8 text."
+    );
+  }
+
+  return createDocument("", content, file.name);
+}
+
+export async function documentsFromFilesPartial(
+  files: FileList | File[],
+  options?: {
+    onProgress?: (current: number, total: number, fileName: string) => void;
+    signal?: AbortSignal;
+  }
+): Promise<FileImportBatch> {
   const readableFiles = Array.from(files);
   const documents: DocumentRecord[] = [];
+  const failures: FileImportFailure[] = [];
 
   for (const [index, file] of readableFiles.entries()) {
     if (options?.signal?.aborted) {
-      throw importError(
-        "Import cancelled.",
-        "The import was stopped before every file finished processing.",
-        "Start the import again when you are ready."
-      );
+      failures.push({
+        fileName: file.name,
+        detail: {
+          title: "Import cancelled.",
+          why: "The import was stopped before every file finished processing.",
+          nextStep: "Start the import again when you are ready."
+        }
+      });
+      break;
     }
 
     options?.onProgress?.(index + 1, readableFiles.length, file.name);
 
-    if (file.size === 0) {
-      throw importError(
-        "The file was empty.",
-        `${file.name} had no readable text content.`,
-        "Pick a file that contains text, or export a supported text representation first."
-      );
+    try {
+      documents.push(await documentFromFile(file));
+    } catch (error) {
+      failures.push({
+        fileName: file.name,
+        detail: describeImportError(error)
+      });
     }
-
-    const lowerName = file.name.toLowerCase();
-    if (lowerName.endsWith(".pdf")) {
-      throw importError(
-        "PDF import is not supported in v2 substance.",
-        `${file.name} is a binary PDF, and the local app only analyzes text-like formats directly.`,
-        "Extract the PDF text first, then import the extracted text or markdown."
-      );
-    }
-
-    const content = await file.text();
-    if (!content.trim()) {
-      throw importError(
-        "The file had no readable text after decoding.",
-        `${file.name} decoded to empty or whitespace-only content.`,
-        "Check the file encoding or export the source as UTF-8 text."
-      );
-    }
-
-    documents.push(createDocument("", content, file.name));
   }
 
-  return documents;
+  return { documents, failures };
 }
 
 export function createSampleDocuments(): DocumentRecord[] {

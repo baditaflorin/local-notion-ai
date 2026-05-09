@@ -8,8 +8,8 @@ type IndexedDocument = {
   content: string;
 };
 
-function searchBody(document: DocumentRecord): string {
-  return document.analysis?.normalizedText ?? document.content;
+function searchBody(document: DocumentRecord | undefined, fallbackContent = ""): string {
+  return document?.analysis?.normalizedText ?? document?.content ?? fallbackContent;
 }
 
 export class LocalSearchIndex {
@@ -61,10 +61,7 @@ export class LocalSearchIndex {
         return {
           id: String(result.id),
           title: String(result.title ?? document?.title ?? "Untitled"),
-          excerpt: clip(
-            searchBody(document ?? ({ content: String(result.content ?? "") } as DocumentRecord)),
-            220
-          ),
+          excerpt: clip(searchBody(document, String(result.content ?? "")), 220),
           score: result.score,
           kind: document?.analysis?.kind,
           confidenceLabel: document?.analysis?.confidenceLabel
