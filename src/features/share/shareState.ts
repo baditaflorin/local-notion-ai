@@ -45,18 +45,22 @@ export function encodeShareBundle(bundle: ExportBundle): string {
 }
 
 export function decodeShareHash(hash: string): ExportBundle | null {
-  const withoutHash = hash.startsWith("#") ? hash.slice(1) : hash;
-  if (!withoutHash.startsWith(SHARE_PREFIX)) {
+  try {
+    const withoutHash = hash.startsWith("#") ? hash.slice(1) : hash;
+    if (!withoutHash.startsWith(SHARE_PREFIX)) {
+      return null;
+    }
+
+    const decoded = new TextDecoder().decode(base64ToBytes(withoutHash.slice(SHARE_PREFIX.length)));
+    const parsed = shareStateSchema.safeParse(JSON.parse(decoded));
+    if (!parsed.success) {
+      return null;
+    }
+
+    return parseExportBundle(JSON.stringify(parsed.data.bundle));
+  } catch {
     return null;
   }
-
-  const decoded = new TextDecoder().decode(base64ToBytes(withoutHash.slice(SHARE_PREFIX.length)));
-  const parsed = shareStateSchema.safeParse(JSON.parse(decoded));
-  if (!parsed.success) {
-    return null;
-  }
-
-  return parseExportBundle(JSON.stringify(parsed.data.bundle));
 }
 
 export function shareUrlForBundle(

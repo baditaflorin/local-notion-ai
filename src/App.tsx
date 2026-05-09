@@ -2,17 +2,24 @@ import {
   AlertTriangle,
   BadgeInfo,
   BookOpen,
+  Clipboard,
+  Copy,
   Download,
   FileSearch,
+  FileSpreadsheet,
   Github,
   Heart,
   Import,
+  Link,
   Loader2,
   MessageSquareText,
   PanelLeft,
   PencilLine,
+  Printer,
   RefreshCw,
   Search,
+  Settings,
+  Share2,
   Sparkles,
   Trash2,
   Upload,
@@ -22,15 +29,21 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { answerQuestion, rewriteText, summarizeDocuments } from "./features/ai/nlp";
 import { LocalSearchIndex } from "./features/search/searchEngine";
 import {
+  createDocument,
   createSampleDocuments,
   describeImportError,
-  documentsFromFiles,
+  documentsFromFilesPartial,
   parseExportBundle
 } from "./features/workspace/importDocuments";
-import { downloadJson } from "./lib/download/download";
+import { aiReportToText, documentsToCsv } from "./features/workspace/exportFormats";
+import { decodeShareHash, shareUrlForBundle } from "./features/share/shareState";
+import { downloadJson, downloadText } from "./lib/download/download";
+import { loadSettings, saveSettings } from "./lib/settings/settingsStore";
+import type { UserSettings } from "./lib/settings/settingsStore";
 import { WorkspaceStore } from "./lib/storage/workspaceStore";
 import { buildInfo } from "./lib/version/buildInfo";
 import type {
+  AiMode,
   Citation,
   DocumentRecord,
   QuestionAnswer,
@@ -39,8 +52,6 @@ import type {
   ToastMessage,
   WorkspaceSnapshot
 } from "./shared/types";
-
-type AiMode = "summary" | "rewrite" | "qa";
 
 type OperationState = {
   kind: "import" | "restore" | "run-ai";
@@ -88,11 +99,46 @@ function labelForConfidence(level: "high" | "medium" | "low"): string {
       : "Low confidence";
 }
 
+function isRewriteStyle(value: string): value is RewriteStyle {
+  return value === "clear" || value === "short" || value === "polished";
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) {
+    throw new Error("copy failed");
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function App() {
   const storeRef = useRef<WorkspaceStore | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const importAbortRef = useRef<AbortController | null>(null);
+  const [settings, setSettings] = useState<UserSettings>(() => loadSettings());
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -103,6 +149,10 @@ export function App() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [operation, setOperation] = useState<OperationState | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [urlInput, setUrlInput] = useState("");
+  const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
     const store = new WorkspaceStore();
@@ -111,6 +161,24 @@ export function App() {
 
     void store
       .load()
+      .then(() => {
+        if (typeof window === "undefined") {
+          return;
+        }
+
+        const bundle = decodeShareHash(window.location.hash);
+        if (bundle) {
+          store.importBundle(bundle);
+          setToast(newToast("success", `Loaded ${bundle.documents.length} shared documents.`));
+        } else if (window.location.hash.startsWith("#state=")) {
+          setToast(
+            newToast(
+              "error",
+              "The shared workspace link could not be opened. The hash is invalid or truncated. Ask for a JSON export instead."
+            )
+          );
+        }
+      })
       .catch(() => {
         setToast(newToast("error", "Could not load the local workspace."));
       })
@@ -120,7 +188,7 @@ export function App() {
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      setShowDebug(params.get("debug") === "1");
+      setShowDebug(params.get("debug") === "1" || settings.debugByDefault);
     }
 
     return () => {
@@ -153,6 +221,53 @@ export function App() {
     return storeRef.current;
   }
 
+  function finishImportedDocuments(
+    documents: DocumentRecord[],
+    failures: { fileName: string; detail: { title: string; why: string; nextStep: string } }[] = []
+  ): void {
+    if (documents.length > 0) {
+      store().addDocuments(documents);
+
+      if (settings.autoRunSummaryAfterImport) {
+        const result = summarizeDocuments(documents);
+        setAiMode("summary");
+        setAiState({
+          mode: "summary",
+          text: result.text,
+          confidence: result.confidence,
+          confidenceLabel: result.confidenceLabel,
+          explanation: result.explanation,
+          citations: []
+        });
+      }
+    }
+
+    if (documents.length > 0 && failures.length > 0) {
+      setToast(
+        newToast(
+          "info",
+          `Imported ${documents.length} document${documents.length === 1 ? "" : "s"}; ${failures.length} file${failures.length === 1 ? "" : "s"} need attention. ${failures[0]?.detail.title ?? ""}`
+        )
+      );
+      return;
+    }
+
+    if (documents.length > 0) {
+      setToast(
+        newToast(
+          "success",
+          `Imported ${documents.length} document${documents.length === 1 ? "" : "s"}.`
+        )
+      );
+      return;
+    }
+
+    if (failures.length > 0) {
+      const detail = failures[0]!.detail;
+      setToast(newToast("error", `${detail.title} ${detail.why} ${detail.nextStep}`));
+    }
+  }
+
   async function handleTextImport(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) {
       return;
@@ -169,7 +284,7 @@ export function App() {
         cancellable: true
       });
 
-      const documents = await documentsFromFiles(files, {
+      const result = await documentsFromFilesPartial(files, {
         signal: abortController.signal,
         onProgress: (current, total, fileName) => {
           setOperation({
@@ -180,13 +295,7 @@ export function App() {
           });
         }
       });
-      store().addDocuments(documents);
-      setToast(
-        newToast(
-          "success",
-          `Imported ${documents.length} document${documents.length === 1 ? "" : "s"}.`
-        )
-      );
+      finishImportedDocuments(result.documents, result.failures);
     } catch (error) {
       const detail = describeImportError(error);
       setToast(newToast("error", `${detail.title} ${detail.why} ${detail.nextStep}`));
@@ -222,6 +331,116 @@ export function App() {
       if (importInputRef.current) {
         importInputRef.current.value = "";
       }
+    }
+  }
+
+  function importRawText(content: string, sourceName: string, title: string): void {
+    if (!content.trim()) {
+      setToast(
+        newToast(
+          "error",
+          "Nothing readable was found. The input was empty or whitespace only. Paste text or choose a text-like file."
+        )
+      );
+      return;
+    }
+
+    finishImportedDocuments([createDocument(title, content, sourceName)]);
+  }
+
+  function handlePastedTextImport(): void {
+    importRawText(pasteText, "pasted-content.txt", "Pasted content");
+    setPasteText("");
+  }
+
+  async function handleClipboardImport(): Promise<void> {
+    try {
+      if (!navigator.clipboard?.readText) {
+        throw new Error("clipboard unavailable");
+      }
+
+      importRawText(await navigator.clipboard.readText(), "clipboard.txt", "Clipboard content");
+    } catch {
+      setToast(
+        newToast(
+          "error",
+          "Clipboard import was blocked. The browser did not grant clipboard text access. Paste the text into the paste box instead."
+        )
+      );
+    }
+  }
+
+  async function handleUrlImport(): Promise<void> {
+    let url: URL;
+    try {
+      url = new URL(urlInput);
+    } catch {
+      setToast(
+        newToast(
+          "error",
+          "The URL could not be read. It is not a complete web URL. Paste a full https:// URL or paste the page text instead."
+        )
+      );
+      return;
+    }
+
+    try {
+      setOperation({
+        kind: "import",
+        message: `Fetching ${url.hostname}`,
+        cancellable: false
+      });
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Accept: "text/html,text/plain,application/json,text/*,*/*;q=0.8"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`status ${response.status}`);
+      }
+
+      const content = await response.text();
+      importRawText(content, url.toString(), url.hostname);
+      setUrlInput("");
+    } catch {
+      setToast(
+        newToast(
+          "error",
+          "The URL could not be imported from this static page. The browser blocked the request or the page did not return readable text. Open the page, copy the rendered text or HTML, and paste it here."
+        )
+      );
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  function handleDrop(event: DragEvent): void {
+    event.preventDefault();
+    setIsDragActive(false);
+
+    if (event.dataTransfer?.files.length) {
+      void handleTextImport(event.dataTransfer.files);
+      return;
+    }
+
+    const html = event.dataTransfer?.getData("text/html") ?? "";
+    const text = event.dataTransfer?.getData("text/plain") ?? "";
+    importRawText(html || text, "dropped-content.txt", "Dropped content");
+  }
+
+  function updateSettings(patch: Partial<UserSettings>): void {
+    const nextSettings: UserSettings = {
+      ...settings,
+      ...patch,
+      schemaVersion: 1
+    };
+    setSettings(nextSettings);
+    saveSettings(nextSettings);
+
+    if (patch.debugByDefault === true) {
+      setShowDebug(true);
     }
   }
 
@@ -293,9 +512,130 @@ export function App() {
     setToast(newToast("success", "Workspace export started."));
   }
 
+  function exportWorkspaceCsv(): void {
+    if (snapshot.documents.length === 0) {
+      setToast(
+        newToast(
+          "error",
+          "CSV export needs documents. The workspace is empty. Import or paste text first."
+        )
+      );
+      return;
+    }
+
+    downloadText(
+      "local-notion-ai-documents.csv",
+      documentsToCsv(snapshot.documents),
+      "text/csv;charset=utf-8"
+    );
+    setToast(newToast("success", "CSV export started."));
+  }
+
+  async function shareWorkspace(): Promise<void> {
+    if (snapshot.documents.length === 0) {
+      setToast(
+        newToast(
+          "error",
+          "Share link needs documents. The workspace is empty. Import or paste text first."
+        )
+      );
+      return;
+    }
+
+    const result = shareUrlForBundle(
+      store().exportBundle({ version: buildInfo.version, commit: buildInfo.commit }),
+      window.location.href
+    );
+
+    if (!result.ok) {
+      setToast(newToast("error", `${result.title} ${result.why} ${result.nextStep}`));
+      return;
+    }
+
+    try {
+      await copyToClipboard(result.url);
+      setToast(newToast("success", "Share link copied."));
+    } catch {
+      setToast(
+        newToast(
+          "error",
+          "The share link could not be copied. Browser clipboard access was blocked. Use JSON export instead."
+        )
+      );
+    }
+  }
+
+  function currentAiReportText(): string | null {
+    if (!aiState) {
+      return null;
+    }
+
+    return aiReportToText(aiState, { version: buildInfo.version, commit: buildInfo.commit });
+  }
+
+  async function copyAiOutput(): Promise<void> {
+    const report = currentAiReportText();
+    if (!report) {
+      setToast(newToast("error", "There is no AI output to copy. Run a local AI action first."));
+      return;
+    }
+
+    try {
+      await copyToClipboard(report);
+      setToast(newToast("success", "AI output copied."));
+    } catch {
+      setToast(
+        newToast(
+          "error",
+          "The AI output could not be copied. Browser clipboard access was blocked. Select the text manually or export JSON."
+        )
+      );
+    }
+  }
+
+  function printAiOutput(): void {
+    const report = currentAiReportText();
+    if (!report) {
+      setToast(newToast("error", "There is no AI output to print. Run a local AI action first."));
+      return;
+    }
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=760,height=900");
+    if (!popup) {
+      setToast(
+        newToast(
+          "error",
+          "The print window was blocked. Allow popups for this site, then run print again."
+        )
+      );
+      return;
+    }
+
+    popup.document.write(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>local-notion-ai report</title>
+  <style>
+    body { color: #17231f; font-family: system-ui, sans-serif; margin: 32px; }
+    pre { white-space: pre-wrap; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <pre>${escapeHtml(report)}</pre>
+</body>
+</html>`);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  }
+
   async function clearWorkspace(): Promise<void> {
     await store().clear();
     setAiState(null);
+    if (typeof window !== "undefined" && window.location.hash.startsWith("#state=")) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
     setToast(newToast("success", "Local workspace cleared."));
   }
 
@@ -309,7 +649,19 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div
+      className={`min-h-screen bg-paper text-ink ${isDragActive ? "ring-4 ring-inset ring-moss/25" : ""}`}
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setIsDragActive(true);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragActive(true);
+      }}
+      onDragLeave={() => setIsDragActive(false)}
+      onDrop={handleDrop}
+    >
       <header className="sticky top-0 z-20 border-b border-ink/10 bg-paper/95 backdrop-blur">
         <div className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3 lg:px-6">
           <div className="flex min-w-56 items-center gap-3">
@@ -343,12 +695,29 @@ export function App() {
             <button className="icon-button" onClick={exportWorkspace} title="Export workspace">
               <Download aria-hidden="true" size={17} />
             </button>
+            <button className="icon-button" onClick={exportWorkspaceCsv} title="Export CSV">
+              <FileSpreadsheet aria-hidden="true" size={17} />
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => void shareWorkspace()}
+              title="Copy share link"
+            >
+              <Share2 aria-hidden="true" size={17} />
+            </button>
             <button
               className={`icon-button ${showDebug ? "bg-moss/12 text-moss" : ""}`}
               onClick={() => setShowDebug((current) => !current)}
               title="Toggle debug surface"
             >
               <BadgeInfo aria-hidden="true" size={17} />
+            </button>
+            <button
+              className={`icon-button ${showSettings ? "bg-moss/12 text-moss" : ""}`}
+              onClick={() => setShowSettings((current) => !current)}
+              title="Settings"
+            >
+              <Settings aria-hidden="true" size={17} />
             </button>
             <a
               className="tool-button"
@@ -405,6 +774,53 @@ export function App() {
               />
             </div>
 
+            <div className="space-y-2 rounded border border-ink/10 bg-white p-3">
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs font-medium uppercase tracking-wide text-ink/55">
+                  Paste text or HTML
+                </span>
+                <textarea
+                  className="min-h-24 resize-y rounded border border-ink/15 bg-paper px-3 py-2 text-sm outline-none focus:border-moss"
+                  value={pasteText}
+                  onInput={(event) => setPasteText(event.currentTarget.value)}
+                  aria-label="Paste text or HTML"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="tool-button justify-center" onClick={handlePastedTextImport}>
+                  <Upload aria-hidden="true" size={16} />
+                  <span>Import paste</span>
+                </button>
+                <button
+                  className="tool-button justify-center"
+                  onClick={() => void handleClipboardImport()}
+                >
+                  <Clipboard aria-hidden="true" size={16} />
+                  <span>Clipboard</span>
+                </button>
+              </div>
+
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs font-medium uppercase tracking-wide text-ink/55">URL</span>
+                <div className="flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded border border-ink/15 bg-paper px-3 py-2 text-sm outline-none focus:border-moss"
+                    value={urlInput}
+                    onInput={(event) => setUrlInput(event.currentTarget.value)}
+                    placeholder="https://example.com"
+                    aria-label="Import URL"
+                  />
+                  <button
+                    className="icon-button"
+                    onClick={() => void handleUrlImport()}
+                    title="Import URL"
+                  >
+                    <Link aria-hidden="true" size={16} />
+                  </button>
+                </div>
+              </label>
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <PanelLeft aria-hidden="true" size={16} />
@@ -445,6 +861,7 @@ export function App() {
               onChange={(patch) => updateDocument(selectedDocument, patch)}
               onRemove={() => store().removeDocument(selectedDocument.id)}
               showDebug={showDebug}
+              showNormalizedPreview={settings.showNormalizedPreview}
             />
           ) : (
             <div className="grid h-full min-h-[560px] place-items-center p-6">
@@ -470,6 +887,8 @@ export function App() {
               Local AI
             </div>
 
+            {showSettings ? <SettingsPanel settings={settings} onChange={updateSettings} /> : null}
+
             <div className="grid grid-cols-3 rounded border border-ink/15 bg-white p-1 text-sm">
               {(["summary", "rewrite", "qa"] as const).map((mode) => (
                 <button
@@ -490,7 +909,12 @@ export function App() {
                 <select
                   className="rounded border border-ink/15 bg-white px-3 py-2 outline-none focus:border-moss"
                   value={rewriteStyle}
-                  onChange={(event) => setRewriteStyle(event.currentTarget.value as RewriteStyle)}
+                  onChange={(event) => {
+                    const nextStyle = event.currentTarget.value;
+                    if (isRewriteStyle(nextStyle)) {
+                      setRewriteStyle(nextStyle);
+                    }
+                  }}
                 >
                   <option value="clear">Clear</option>
                   <option value="short">Short</option>
@@ -531,6 +955,17 @@ export function App() {
                       {labelForConfidence(aiState.confidenceLabel)}
                     </span>
                     <span className="text-xs text-ink/55">{percentLabel(aiState.confidence)}</span>
+                    <span className="flex-1" />
+                    <button
+                      className="icon-button"
+                      onClick={() => void copyAiOutput()}
+                      title="Copy AI output"
+                    >
+                      <Copy aria-hidden="true" size={15} />
+                    </button>
+                    <button className="icon-button" onClick={printAiOutput} title="Print AI output">
+                      <Printer aria-hidden="true" size={15} />
+                    </button>
                   </div>
                   <div className="min-h-48 whitespace-pre-wrap text-sm leading-6">
                     {aiState.text}
@@ -609,6 +1044,47 @@ function resultToState(mode: AiMode, result: QuestionAnswer): AiState {
   };
 }
 
+function SettingsPanel({
+  settings,
+  onChange
+}: {
+  settings: UserSettings;
+  onChange: (patch: Partial<UserSettings>) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded border border-ink/10 bg-white p-3 text-sm">
+      <div className="flex items-center gap-2 font-semibold">
+        <Settings aria-hidden="true" size={16} />
+        Settings
+      </div>
+      <label className="flex items-center justify-between gap-3">
+        <span>Open debug by default</span>
+        <input
+          type="checkbox"
+          checked={settings.debugByDefault}
+          onChange={(event) => onChange({ debugByDefault: event.currentTarget.checked })}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-3">
+        <span>Auto-summary after import</span>
+        <input
+          type="checkbox"
+          checked={settings.autoRunSummaryAfterImport}
+          onChange={(event) => onChange({ autoRunSummaryAfterImport: event.currentTarget.checked })}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-3">
+        <span>Normalized preview</span>
+        <input
+          type="checkbox"
+          checked={settings.showNormalizedPreview}
+          onChange={(event) => onChange({ showNormalizedPreview: event.currentTarget.checked })}
+        />
+      </label>
+    </div>
+  );
+}
+
 function DocumentRow({
   result,
   isActive,
@@ -647,12 +1123,14 @@ function DocumentEditor({
   document,
   onChange,
   onRemove,
-  showDebug
+  showDebug,
+  showNormalizedPreview
 }: {
   document: DocumentRecord;
   onChange: (patch: Partial<Pick<DocumentRecord, "title" | "content">>) => void;
   onRemove: () => void;
   showDebug: boolean;
+  showNormalizedPreview: boolean;
 }) {
   const analysis = document.analysis;
 
@@ -749,14 +1227,16 @@ function DocumentEditor({
               </div>
             </div>
 
-            <div className="rounded border border-ink/10 bg-white p-3">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/55">
-                Normalized preview
+            {showNormalizedPreview ? (
+              <div className="rounded border border-ink/10 bg-white p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/55">
+                  Normalized preview
+                </div>
+                <div className="whitespace-pre-wrap text-xs leading-5 text-ink/70">
+                  {analysis.normalizedText.slice(0, 600) || "No normalized text available."}
+                </div>
               </div>
-              <div className="whitespace-pre-wrap text-xs leading-5 text-ink/70">
-                {analysis.normalizedText.slice(0, 600) || "No normalized text available."}
-              </div>
-            </div>
+            ) : null}
           </div>
 
           {showDebug ? (
