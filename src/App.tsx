@@ -1014,6 +1014,7 @@ export function App() {
       </div>
       {toast ? (
         <div
+          aria-hidden="true"
           className={`fixed bottom-4 left-1/2 z-30 w-[min(720px,calc(100vw-32px))] -translate-x-1/2 rounded px-4 py-3 text-sm shadow-soft ${toast.tone}`}
         >
           {toast.text}
