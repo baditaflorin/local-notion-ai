@@ -24,4 +24,13 @@ test("imports a document and runs local Q&A", async ({ page }) => {
   );
   await page.getByLabel("Search local documents").fill("");
   await expect(page.getByText("import note")).toBeVisible();
+
+  await page.getByLabel("Paste text or HTML").fill("Quarterly note\n\nRevenue grew 12%.");
+  await page.getByRole("button", { name: /Import paste/i }).click();
+  await expect(page.getByText("Pasted content")).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTitle("Export CSV").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("local-notion-ai-documents.csv");
 });

@@ -600,7 +600,7 @@ export function App() {
       return;
     }
 
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=760,height=900");
+    const popup = window.open("", "_blank", "width=760,height=900");
     if (!popup) {
       setToast(
         newToast(
