@@ -13,7 +13,7 @@ export PORT PLAYWRIGHT_BASE_URL
 
 node scripts/serve-pages.mjs &
 SERVER_PID="$!"
-trap 'kill "$SERVER_PID" >/dev/null 2>&1 || true' EXIT
+trap 'kill "$SERVER_PID" >/dev/null 2>&1 || true; wait "$SERVER_PID" 2>/dev/null || true' EXIT
 
 for _ in $(seq 1 40); do
   if curl -fsS "$PLAYWRIGHT_BASE_URL" >/dev/null; then
