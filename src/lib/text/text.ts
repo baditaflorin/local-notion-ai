@@ -10,6 +10,24 @@ export function countWords(input: string): number {
   return words(input).length;
 }
 
+export function normalizeLineEndings(input: string): string {
+  return input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+export function normalizeWhitespace(input: string, preserveParagraphs = false): string {
+  const normalized = normalizeLineEndings(input).trim();
+  if (!preserveParagraphs) {
+    return normalized.replace(/\s+/g, " ");
+  }
+
+  return normalized
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function splitSentences(input: string): string[] {
   const normalized = input.replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -42,4 +60,13 @@ export function titleFromSource(sourceName: string, fallback: string): string {
   const withoutExtension = sourceName.replace(/\.[^.]+$/, "");
   const spaced = withoutExtension.replace(/[-_]+/g, " ").trim();
   return spaced || fallback;
+}
+
+export function stableHash(input: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `h${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }

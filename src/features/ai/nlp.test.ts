@@ -27,12 +27,12 @@ const docs: DocumentRecord[] = [
 
 describe("local AI helpers", () => {
   it("summarizes the highest signal sentences", () => {
-    expect(summarizeDocuments(docs, 2)).toContain("Local AI keeps private documents");
+    expect(summarizeDocuments(docs, 2).text).toContain("Local AI keeps private documents");
   });
 
   it("rewrites verbose text with the selected style", () => {
     expect(
-      rewriteText("In order to utilize the tool, we need to import notes.", "clear")
+      rewriteText("In order to utilize the tool, we need to import notes.", "clear").text
     ).toContain("to use the tool");
   });
 

@@ -1,0 +1,11 @@
+{
+  "kind": "html",
+  "minConfidence": 0.85,
+  "normalizedIncludes": [
+    "Warehouse Sensors Cut Spoilage by 18 Percent",
+    "FreshCart added low-cost temperature sensors across twelve warehouses in Q1."
+  ],
+  "summaryIncludes": ["reduced spoilage by 18 percent"],
+  "question": "What changed after the rollout?",
+  "answerIncludes": ["reduced spoilage by 18 percent", "improved restock timing"]
+}

@@ -1,6 +1,9 @@
 import {
+  AlertTriangle,
+  BadgeInfo,
   BookOpen,
   Download,
+  FileSearch,
   Github,
   Heart,
   Import,
@@ -12,13 +15,15 @@ import {
   Search,
   Sparkles,
   Trash2,
-  Upload
+  Upload,
+  X
 } from "lucide-preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { answerQuestion, rewriteText, summarizeDocuments } from "./features/ai/nlp";
 import { LocalSearchIndex } from "./features/search/searchEngine";
 import {
   createSampleDocuments,
+  describeImportError,
   documentsFromFiles,
   parseExportBundle
 } from "./features/workspace/importDocuments";
@@ -26,7 +31,9 @@ import { downloadJson } from "./lib/download/download";
 import { WorkspaceStore } from "./lib/storage/workspaceStore";
 import { buildInfo } from "./lib/version/buildInfo";
 import type {
+  Citation,
   DocumentRecord,
+  QuestionAnswer,
   RewriteStyle,
   SearchResult,
   ToastMessage,
@@ -34,6 +41,22 @@ import type {
 } from "./shared/types";
 
 type AiMode = "summary" | "rewrite" | "qa";
+
+type OperationState = {
+  kind: "import" | "restore" | "run-ai";
+  message: string;
+  progress?: string;
+  cancellable?: boolean;
+};
+
+type AiState = {
+  mode: AiMode;
+  text: string;
+  confidence: number;
+  confidenceLabel: "high" | "medium" | "low";
+  explanation: string;
+  citations: Citation[];
+} | null;
 
 const emptySnapshot: WorkspaceSnapshot = {
   documents: [],
@@ -53,18 +76,33 @@ function shortCommit(commit: string): string {
   return commit.length > 12 ? commit.slice(0, 12) : commit;
 }
 
+function percentLabel(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function labelForConfidence(level: "high" | "medium" | "low"): string {
+  return level === "high"
+    ? "High confidence"
+    : level === "medium"
+      ? "Medium confidence"
+      : "Low confidence";
+}
+
 export function App() {
   const storeRef = useRef<WorkspaceStore | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const importAbortRef = useRef<AbortController | null>(null);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot>(emptySnapshot);
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [aiMode, setAiMode] = useState<AiMode>("summary");
   const [rewriteStyle, setRewriteStyle] = useState<RewriteStyle>("clear");
   const [question, setQuestion] = useState("What matters most in these docs?");
-  const [aiOutput, setAiOutput] = useState("");
+  const [aiState, setAiState] = useState<AiState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [operation, setOperation] = useState<OperationState | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     const store = new WorkspaceStore();
@@ -79,6 +117,11 @@ export function App() {
       .finally(() => {
         setIsLoading(false);
       });
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setShowDebug(params.get("debug") === "1");
+    }
 
     return () => {
       unsubscribe();
@@ -115,8 +158,28 @@ export function App() {
       return;
     }
 
+    const abortController = new AbortController();
+    importAbortRef.current = abortController;
+
     try {
-      const documents = await documentsFromFiles(files);
+      setOperation({
+        kind: "import",
+        message: "Analyzing local files",
+        progress: `0/${files.length}`,
+        cancellable: true
+      });
+
+      const documents = await documentsFromFiles(files, {
+        signal: abortController.signal,
+        onProgress: (current, total, fileName) => {
+          setOperation({
+            kind: "import",
+            message: `Analyzing ${fileName}`,
+            progress: `${current}/${total}`,
+            cancellable: true
+          });
+        }
+      });
       store().addDocuments(documents);
       setToast(
         newToast(
@@ -124,9 +187,12 @@ export function App() {
           `Imported ${documents.length} document${documents.length === 1 ? "" : "s"}.`
         )
       );
-    } catch {
-      setToast(newToast("error", "Import failed. Try plain text, Markdown, or exported JSON."));
+    } catch (error) {
+      const detail = describeImportError(error);
+      setToast(newToast("error", `${detail.title} ${detail.why} ${detail.nextStep}`));
     } finally {
+      setOperation(null);
+      importAbortRef.current = null;
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -140,12 +206,19 @@ export function App() {
     }
 
     try {
+      setOperation({
+        kind: "restore",
+        message: `Restoring ${file.name}`,
+        cancellable: false
+      });
       const bundle = parseExportBundle(await file.text());
       store().importBundle(bundle);
       setToast(newToast("success", `Restored ${bundle.documents.length} documents.`));
-    } catch {
-      setToast(newToast("error", "That file is not a valid local-notion-ai export."));
+    } catch (error) {
+      const detail = describeImportError(error);
+      setToast(newToast("error", `${detail.title} ${detail.why} ${detail.nextStep}`));
     } finally {
+      setOperation(null);
       if (importInputRef.current) {
         importInputRef.current.value = "";
       }
@@ -160,36 +233,79 @@ export function App() {
   }
 
   function runAi(): void {
-    if (aiMode === "summary") {
-      setAiOutput(
-        summarizeDocuments(activeDocuments.length > 0 ? activeDocuments : snapshot.documents)
-      );
-      return;
-    }
+    setOperation({
+      kind: "run-ai",
+      message:
+        aiMode === "summary"
+          ? "Summarizing normalized content"
+          : aiMode === "rewrite"
+            ? "Applying deterministic rewrite rules"
+            : "Searching normalized chunks",
+      cancellable: false
+    });
 
-    if (aiMode === "rewrite") {
-      setAiOutput(rewriteText(selectedDocument?.content ?? "", rewriteStyle));
-      return;
-    }
+    window.setTimeout(() => {
+      if (aiMode === "summary") {
+        const result = summarizeDocuments(
+          activeDocuments.length > 0 ? activeDocuments : snapshot.documents
+        );
+        setAiState({
+          mode: aiMode,
+          text: result.text,
+          confidence: result.confidence,
+          confidenceLabel: result.confidenceLabel,
+          explanation: result.explanation,
+          citations: []
+        });
+        setOperation(null);
+        return;
+      }
 
-    const result = answerQuestion(question, snapshot.documents);
-    setAiOutput(result.answer);
+      if (aiMode === "rewrite") {
+        const result = rewriteText(
+          selectedDocument?.content ?? "",
+          rewriteStyle,
+          selectedDocument ?? undefined
+        );
+        setAiState({
+          mode: aiMode,
+          text: result.text,
+          confidence: result.confidence,
+          confidenceLabel: result.confidenceLabel,
+          explanation: result.explanation,
+          citations: []
+        });
+        setOperation(null);
+        return;
+      }
+
+      const result = answerQuestion(question, snapshot.documents);
+      setAiState(resultToState(aiMode, result));
+      setOperation(null);
+    }, 0);
   }
 
   function exportWorkspace(): void {
-    downloadJson("local-notion-ai-export.json", store().exportBundle());
+    downloadJson(
+      "local-notion-ai-export.json",
+      store().exportBundle({ version: buildInfo.version, commit: buildInfo.commit })
+    );
     setToast(newToast("success", "Workspace export started."));
   }
 
   async function clearWorkspace(): Promise<void> {
     await store().clear();
-    setAiOutput("");
+    setAiState(null);
     setToast(newToast("success", "Local workspace cleared."));
   }
 
   function loadSamples(): void {
     store().addDocuments(createSampleDocuments());
     setToast(newToast("success", "Loaded sample documents."));
+  }
+
+  function cancelOperation(): void {
+    importAbortRef.current?.abort();
   }
 
   return (
@@ -227,6 +343,13 @@ export function App() {
             <button className="icon-button" onClick={exportWorkspace} title="Export workspace">
               <Download aria-hidden="true" size={17} />
             </button>
+            <button
+              className={`icon-button ${showDebug ? "bg-moss/12 text-moss" : ""}`}
+              onClick={() => setShowDebug((current) => !current)}
+              title="Toggle debug surface"
+            >
+              <BadgeInfo aria-hidden="true" size={17} />
+            </button>
             <a
               className="tool-button"
               href={buildInfo.repositoryUrl}
@@ -248,6 +371,25 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {operation ? (
+        <div className="flex items-center justify-between border-b border-moss/20 bg-moss/8 px-4 py-2 text-sm text-ink/80">
+          <div className="flex items-center gap-2">
+            <Loader2 className="animate-spin text-moss" size={16} />
+            <span>{operation.message}</span>
+            {operation.progress ? (
+              <span className="rounded bg-white px-2 py-1 text-xs text-ink/60">
+                {operation.progress}
+              </span>
+            ) : null}
+          </div>
+          {operation.cancellable ? (
+            <button className="icon-button" onClick={cancelOperation} title="Cancel operation">
+              <X aria-hidden="true" size={16} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <main className="grid min-h-[calc(100vh-65px)] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)_380px]">
         <aside className="border-b border-ink/10 bg-white/55 lg:border-b-0 lg:border-r">
@@ -302,6 +444,7 @@ export function App() {
               document={selectedDocument}
               onChange={(patch) => updateDocument(selectedDocument, patch)}
               onRemove={() => store().removeDocument(selectedDocument.id)}
+              showDebug={showDebug}
             />
           ) : (
             <div className="grid h-full min-h-[560px] place-items-center p-6">
@@ -369,13 +512,52 @@ export function App() {
               </label>
             ) : null}
 
-            <button className="primary-button" onClick={runAi}>
+            <button
+              className="primary-button"
+              onClick={runAi}
+              disabled={operation?.kind === "import"}
+            >
               <RefreshCw aria-hidden="true" size={17} />
               <span>Run locally</span>
             </button>
 
-            <div className="min-h-72 flex-1 whitespace-pre-wrap rounded border border-ink/10 bg-white p-4 text-sm leading-6 shadow-soft">
-              {aiOutput || "Results appear here."}
+            <div className="space-y-3 rounded border border-ink/10 bg-white p-4 shadow-soft">
+              {aiState ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded px-2 py-1 text-xs ${aiState.confidenceLabel === "high" ? "bg-moss/12 text-moss" : aiState.confidenceLabel === "medium" ? "bg-gold/12 text-gold" : "bg-coral/12 text-coral"}`}
+                    >
+                      {labelForConfidence(aiState.confidenceLabel)}
+                    </span>
+                    <span className="text-xs text-ink/55">{percentLabel(aiState.confidence)}</span>
+                  </div>
+                  <div className="min-h-48 whitespace-pre-wrap text-sm leading-6">
+                    {aiState.text}
+                  </div>
+                  <div className="rounded bg-paper px-3 py-2 text-xs leading-5 text-ink/70">
+                    {aiState.explanation}
+                  </div>
+                  {aiState.citations.length > 0 ? (
+                    <div className="space-y-2 border-t border-ink/10 pt-3">
+                      {aiState.citations.map((citation) => (
+                        <div
+                          key={`${citation.documentId}:${citation.chunkLabel ?? citation.title}`}
+                          className="rounded border border-ink/10 bg-paper px-3 py-2 text-xs leading-5"
+                        >
+                          <div className="font-semibold text-ink">
+                            {citation.title}
+                            {citation.chunkLabel ? ` · ${citation.chunkLabel}` : ""}
+                          </div>
+                          <div className="text-ink/65">{citation.reason}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="min-h-72 text-sm leading-6 text-ink/65">Results appear here.</div>
+              )}
             </div>
 
             <button className="danger-button" onClick={() => void clearWorkspace()}>
@@ -391,7 +573,7 @@ export function App() {
         className="sr-only"
         type="file"
         multiple
-        accept=".txt,.md,.markdown,.csv,.json,.html"
+        accept=".txt,.md,.markdown,.csv,.json,.html,.eml"
         onChange={(event) => void handleTextImport(event.currentTarget.files)}
       />
       <input
@@ -407,13 +589,24 @@ export function App() {
       </div>
       {toast ? (
         <div
-          className={`fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded px-4 py-3 text-sm shadow-soft ${toast.tone}`}
+          className={`fixed bottom-4 left-1/2 z-30 w-[min(720px,calc(100vw-32px))] -translate-x-1/2 rounded px-4 py-3 text-sm shadow-soft ${toast.tone}`}
         >
           {toast.text}
         </div>
       ) : null}
     </div>
   );
+}
+
+function resultToState(mode: AiMode, result: QuestionAnswer): AiState {
+  return {
+    mode,
+    text: result.answer,
+    confidence: result.confidence,
+    confidenceLabel: result.confidenceLabel,
+    explanation: result.explanation,
+    citations: result.citations
+  };
 }
 
 function DocumentRow({
@@ -430,10 +623,22 @@ function DocumentRow({
       className={`w-full rounded border p-3 text-left transition ${isActive ? "border-moss bg-moss/10" : "border-ink/10 bg-white hover:border-moss/60"}`}
       onClick={onSelect}
     >
-      <span className="block truncate text-sm font-semibold">{result.title}</span>
+      <div className="flex items-start justify-between gap-2">
+        <span className="block truncate text-sm font-semibold">{result.title}</span>
+        {result.kind ? (
+          <span className="rounded bg-ink/6 px-2 py-1 text-[10px] uppercase tracking-wide text-ink/55">
+            {result.kind}
+          </span>
+        ) : null}
+      </div>
       <span className="mt-1 line-clamp-2 block text-xs leading-5 text-ink/60">
         {result.excerpt}
       </span>
+      {result.confidenceLabel ? (
+        <span className="mt-2 inline-flex rounded bg-paper px-2 py-1 text-[10px] uppercase tracking-wide text-ink/55">
+          {result.confidenceLabel} confidence
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -441,35 +646,131 @@ function DocumentRow({
 function DocumentEditor({
   document,
   onChange,
-  onRemove
+  onRemove,
+  showDebug
 }: {
   document: DocumentRecord;
   onChange: (patch: Partial<Pick<DocumentRecord, "title" | "content">>) => void;
   onRemove: () => void;
+  showDebug: boolean;
 }) {
+  const analysis = document.analysis;
+
   return (
     <div className="flex h-full min-h-[560px] flex-col">
-      <div className="flex flex-wrap items-center gap-3 border-b border-ink/10 p-4">
-        <PencilLine aria-hidden="true" size={18} className="text-moss" />
-        <input
-          className="min-w-64 flex-1 bg-transparent text-xl font-semibold outline-none"
-          value={document.title}
-          onInput={(event) => onChange({ title: event.currentTarget.value })}
-          aria-label="Document title"
-        />
-        <span className="rounded bg-sky/10 px-2 py-1 text-xs text-sky">
-          {document.wordCount} words
-        </span>
-        <button className="icon-button" onClick={onRemove} title="Remove document">
-          <Trash2 aria-hidden="true" size={16} />
-        </button>
+      <div className="space-y-3 border-b border-ink/10 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <PencilLine aria-hidden="true" size={18} className="text-moss" />
+          <input
+            className="min-w-64 flex-1 bg-transparent text-xl font-semibold outline-none"
+            value={document.title}
+            onInput={(event) => onChange({ title: event.currentTarget.value })}
+            aria-label="Document title"
+          />
+          <span className="rounded bg-sky/10 px-2 py-1 text-xs text-sky">
+            {document.wordCount} words
+          </span>
+          <button className="icon-button" onClick={onRemove} title="Remove document">
+            <Trash2 aria-hidden="true" size={16} />
+          </button>
+        </div>
+
+        {analysis ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded bg-moss/12 px-2 py-1 text-moss">{analysis.kind}</span>
+            <span
+              className={`rounded px-2 py-1 ${analysis.confidenceLabel === "high" ? "bg-moss/12 text-moss" : analysis.confidenceLabel === "medium" ? "bg-gold/12 text-gold" : "bg-coral/12 text-coral"}`}
+            >
+              {labelForConfidence(analysis.confidenceLabel)}
+            </span>
+            <span className="rounded bg-paper px-2 py-1 text-ink/60">
+              digest {analysis.sourceDigest}
+            </span>
+          </div>
+        ) : null}
+
+        {analysis?.warnings.length ? (
+          <div className="space-y-2">
+            {analysis.warnings.map((warning) => (
+              <div
+                key={warning.code}
+                className="flex items-start gap-2 rounded border border-coral/20 bg-coral/6 px-3 py-2 text-xs leading-5 text-ink/75"
+              >
+                <AlertTriangle
+                  aria-hidden="true"
+                  size={14}
+                  className="mt-0.5 shrink-0 text-coral"
+                />
+                <div>
+                  <div>{warning.message}</div>
+                  {warning.nextStep ? <div className="text-ink/55">{warning.nextStep}</div> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
+
       <textarea
-        className="min-h-[500px] flex-1 resize-none p-5 font-mono text-sm leading-6 outline-none"
+        className="min-h-[360px] flex-1 resize-none p-5 font-mono text-sm leading-6 outline-none"
         value={document.content}
         onInput={(event) => onChange({ content: event.currentTarget.value })}
         aria-label="Document content"
       />
+
+      {analysis ? (
+        <div className="border-t border-ink/10 bg-paper/70 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+            <FileSearch aria-hidden="true" size={16} />
+            Analysis
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="rounded border border-ink/10 bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/55">
+                Detected fields
+              </div>
+              <div className="space-y-2 text-xs leading-5">
+                {analysis.detectedFields.length ? (
+                  analysis.detectedFields.map((field) => (
+                    <div key={`${field.key}:${field.value}`} className="rounded bg-paper px-2 py-2">
+                      <div className="font-semibold text-ink">
+                        {field.key}: {field.value}
+                      </div>
+                      <div className="text-ink/60">
+                        {field.type} · {percentLabel(field.confidence)} · {field.reason}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-ink/55">
+                    No field-level inference was strong enough to surface.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded border border-ink/10 bg-white p-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/55">
+                Normalized preview
+              </div>
+              <div className="whitespace-pre-wrap text-xs leading-5 text-ink/70">
+                {analysis.normalizedText.slice(0, 600) || "No normalized text available."}
+              </div>
+            </div>
+          </div>
+
+          {showDebug ? (
+            <div className="mt-3 rounded border border-ink/10 bg-white p-3 text-xs leading-5 text-ink/70">
+              <div className="mb-2 font-semibold text-ink">Debug</div>
+              <div>signals: {analysis.debug.signals.join(", ") || "none"}</div>
+              <div>chars: {analysis.debug.charCount}</div>
+              <div>lines: {analysis.debug.lineCount}</div>
+              <div>chunks: {analysis.chunks.length}</div>
+              <div>hint: {analysis.summaryHint}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

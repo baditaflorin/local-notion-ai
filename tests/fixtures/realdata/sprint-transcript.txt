@@ -1,0 +1,5 @@
+[00:00] Maya: Thanks everyone. The warehouse pilot is green for Chicago and delayed for Austin.
+[00:19] Leo: Austin is blocked on vendor firmware and we need a revised delivery date.
+[00:37] Maya: Action item - Leo follows up with the vendor by Friday.
+[00:51] Priya: Action item - Priya updates the rollout plan after that reply.
+

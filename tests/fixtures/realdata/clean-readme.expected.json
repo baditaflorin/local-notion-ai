@@ -1,0 +1,8 @@
+{
+  "kind": "markdown",
+  "minConfidence": 0.65,
+  "normalizedIncludes": ["Field Ops Notes", "Imports markdown, HTML, CSV, and email exports."],
+  "summaryIncludes": ["Field Ops helps teams turn messy client notes into structured follow-up"],
+  "question": "What formats does it import?",
+  "answerIncludes": ["markdown, HTML, CSV, and email exports"]
+}

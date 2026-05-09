@@ -1,0 +1,26 @@
+Research digest
+
+North warehouse pilot: spoilage dropped after sensor calibration. The team noted that the first pass over-reported freezer alarms.
+
+Austin warehouse pilot: deployment blocked by vendor firmware, replacement boards, and a delayed maintenance window.
+
+Action item: update the risk register after the vendor confirms the revised firmware date.
+
+North warehouse pilot: spoilage dropped after sensor calibration. The team noted that the first pass over-reported freezer alarms.
+
+Austin warehouse pilot: deployment blocked by vendor firmware, replacement boards, and a delayed maintenance window.
+
+Action item: update the risk register after the vendor confirms the revised firmware date.
+
+North warehouse pilot: spoilage dropped after sensor calibration. The team noted that the first pass over-reported freezer alarms.
+
+Austin warehouse pilot: deployment blocked by vendor firmware, replacement boards, and a delayed maintenance window.
+
+Action item: update the risk register after the vendor confirms the revised firmware date.
+
+North warehouse pilot: spoilage dropped after sensor calibration. The team noted that the first pass over-reported freezer alarms.
+
+Austin warehouse pilot: deployment blocked by vendor firmware, replacement boards, and a delayed maintenance window.
+
+Action item: update the risk register after the vendor confirms the revised firmware date.
+

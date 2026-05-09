@@ -1,0 +1,5 @@
+“Customer note”  
+Order ID: AB-4421
+Date: 05/02/2026
+Please review the café shipment - the label says “fragile” and the last update copied old text.
+

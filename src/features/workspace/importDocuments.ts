@@ -1,30 +1,41 @@
 import { z } from "zod";
-import { countWords, titleFromSource } from "../../lib/text/text";
-import type { DocumentRecord, ExportBundle } from "../../shared/types";
+import { analyzeDocumentInput } from "../analysis/documentAnalysis";
+import { stableHash } from "../../lib/text/text";
+import type { DocumentRecord, ExportBundle, ImportError } from "../../shared/types";
 
-const exportBundleSchema = z.object({
-  schemaVersion: z.literal(1),
-  exportedAt: z.string(),
-  documents: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string().min(1),
-      content: z.string(),
-      createdAt: z.string(),
-      updatedAt: z.string(),
-      sourceName: z.string().optional(),
-      wordCount: z.number().int().nonnegative(),
-      tags: z.array(z.string())
-    })
-  )
+const documentSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  content: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  sourceName: z.string().optional(),
+  wordCount: z.number().int().nonnegative(),
+  tags: z.array(z.string()),
+  analysis: z.unknown().optional()
 });
 
-function randomId(): string {
-  if ("crypto" in globalThis && "randomUUID" in globalThis.crypto) {
-    return globalThis.crypto.randomUUID();
-  }
+const exportBundleV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string(),
+  documents: z.array(documentSchema)
+});
 
-  return `doc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const exportBundleV2Schema = z.object({
+  schemaVersion: z.literal(2),
+  exportedAt: z.string(),
+  appVersion: z.string(),
+  appCommit: z.string(),
+  exportDigest: z.string(),
+  documents: z.array(documentSchema)
+});
+
+function stableDocumentId(sourceName: string | undefined, normalizedContent: string): string {
+  return `doc-${stableHash(`${sourceName ?? "inline"}\n${normalizedContent}`)}`;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 export function createDocument(
@@ -32,30 +43,94 @@ export function createDocument(
   content: string,
   sourceName?: string
 ): DocumentRecord {
-  const now = new Date().toISOString();
+  const analyzed = analyzeDocumentInput({ title, rawContent: content, sourceName });
+  const now = nowIso();
+
   return {
-    id: randomId(),
-    title: title.trim() || "Untitled document",
+    id: stableDocumentId(sourceName ?? title, analyzed.normalizedContent),
+    title: analyzed.normalizedTitle,
     content,
     createdAt: now,
     updatedAt: now,
     sourceName,
-    wordCount: countWords(content),
-    tags: []
+    wordCount: analyzed.wordCount,
+    tags: [],
+    analysis: analyzed.analysis
   };
 }
 
-export async function documentsFromFiles(files: FileList | File[]): Promise<DocumentRecord[]> {
-  const readableFiles = Array.from(files).filter((file) => file.size > 0);
-  const parsed = await Promise.all(
-    readableFiles.map(async (file, index) => {
-      const content = await file.text();
-      const title = titleFromSource(file.name, `Imported document ${index + 1}`);
-      return createDocument(title, content, file.name);
-    })
-  );
+function importError(title: string, why: string, nextStep: string): Error {
+  const error = new Error(title) as Error & { detail: ImportError };
+  error.detail = { title, why, nextStep };
+  return error;
+}
 
-  return parsed.filter((document) => document.content.trim().length > 0);
+export function describeImportError(error: unknown): ImportError {
+  const detail =
+    typeof error === "object" && error !== null && "detail" in error
+      ? (error as { detail?: ImportError }).detail
+      : undefined;
+
+  return (
+    detail ?? {
+      title: "Import failed.",
+      why: "The file could not be read into a supported local text format.",
+      nextStep: "Try plain text, Markdown, CSV, HTML, JSON, or a local-notion-ai export."
+    }
+  );
+}
+
+export async function documentsFromFiles(
+  files: FileList | File[],
+  options?: {
+    onProgress?: (current: number, total: number, fileName: string) => void;
+    signal?: AbortSignal;
+  }
+): Promise<DocumentRecord[]> {
+  const readableFiles = Array.from(files);
+  const documents: DocumentRecord[] = [];
+
+  for (const [index, file] of readableFiles.entries()) {
+    if (options?.signal?.aborted) {
+      throw importError(
+        "Import cancelled.",
+        "The import was stopped before every file finished processing.",
+        "Start the import again when you are ready."
+      );
+    }
+
+    options?.onProgress?.(index + 1, readableFiles.length, file.name);
+
+    if (file.size === 0) {
+      throw importError(
+        "The file was empty.",
+        `${file.name} had no readable text content.`,
+        "Pick a file that contains text, or export a supported text representation first."
+      );
+    }
+
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith(".pdf")) {
+      throw importError(
+        "PDF import is not supported in v2 substance.",
+        `${file.name} is a binary PDF, and the local app only analyzes text-like formats directly.`,
+        "Extract the PDF text first, then import the extracted text or markdown."
+      );
+    }
+
+    const content = await file.text();
+    if (!content.trim()) {
+      throw importError(
+        "The file had no readable text after decoding.",
+        `${file.name} decoded to empty or whitespace-only content.`,
+        "Check the file encoding or export the source as UTF-8 text."
+      );
+    }
+
+    documents.push(createDocument("", content, file.name));
+  }
+
+  return documents;
 }
 
 export function createSampleDocuments(): DocumentRecord[] {
@@ -84,6 +159,46 @@ export function createSampleDocuments(): DocumentRecord[] {
 }
 
 export function parseExportBundle(input: string): ExportBundle {
-  const parsed: unknown = JSON.parse(input);
-  return exportBundleSchema.parse(parsed);
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(input);
+  } catch {
+    throw importError(
+      "The export file is not valid JSON.",
+      "The file could not be parsed as a local-notion-ai export bundle.",
+      "Open the file and check whether it was truncated or saved in a different format."
+    );
+  }
+
+  const v2 = exportBundleV2Schema.safeParse(parsedJson);
+  if (v2.success) {
+    const documents = v2.data.documents.map((document) =>
+      createDocument(document.title, document.content, document.sourceName)
+    );
+    return {
+      ...v2.data,
+      documents
+    };
+  }
+
+  const v1 = exportBundleV1Schema.safeParse(parsedJson);
+  if (v1.success) {
+    const documents = v1.data.documents.map((document) =>
+      createDocument(document.title, document.content, document.sourceName)
+    );
+    return {
+      schemaVersion: 2,
+      exportedAt: v1.data.exportedAt,
+      appVersion: "legacy-v1",
+      appCommit: "legacy-v1",
+      exportDigest: stableHash(JSON.stringify(documents.map((document) => document.id))),
+      documents
+    };
+  }
+
+  throw importError(
+    "The export file uses an unsupported schema.",
+    "The JSON parsed successfully, but it does not match the local-notion-ai export contract.",
+    "Use an export produced by this app, or convert the source into plain text and import it directly."
+  );
 }

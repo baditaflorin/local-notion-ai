@@ -8,6 +8,10 @@ type IndexedDocument = {
   content: string;
 };
 
+function searchBody(document: DocumentRecord): string {
+  return document.analysis?.normalizedText ?? document.content;
+}
+
 export class LocalSearchIndex {
   private readonly miniSearch: MiniSearch<IndexedDocument>;
   private readonly documentsById: Map<string, DocumentRecord>;
@@ -28,7 +32,7 @@ export class LocalSearchIndex {
       documents.map((document) => ({
         id: document.id,
         title: document.title,
-        content: document.content
+        content: searchBody(document)
       }))
     );
   }
@@ -37,12 +41,15 @@ export class LocalSearchIndex {
     const trimmed = query.trim();
     if (!trimmed) {
       return Array.from(this.documentsById.values())
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, limit)
         .map((document) => ({
           id: document.id,
           title: document.title,
-          excerpt: clip(document.content, 180),
-          score: 1
+          excerpt: clip(searchBody(document), 180),
+          score: 1,
+          kind: document.analysis?.kind,
+          confidenceLabel: document.analysis?.confidenceLabel
         }));
     }
 
@@ -54,8 +61,13 @@ export class LocalSearchIndex {
         return {
           id: String(result.id),
           title: String(result.title ?? document?.title ?? "Untitled"),
-          excerpt: clip(document?.content ?? String(result.content ?? ""), 220),
-          score: result.score
+          excerpt: clip(
+            searchBody(document ?? ({ content: String(result.content ?? "") } as DocumentRecord)),
+            220
+          ),
+          score: result.score,
+          kind: document?.analysis?.kind,
+          confidenceLabel: document?.analysis?.confidenceLabel
         };
       });
   }

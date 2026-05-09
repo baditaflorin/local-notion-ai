@@ -1,0 +1,8 @@
+{
+  "kind": "html",
+  "minConfidence": 0.85,
+  "normalizedIncludes": ["Privacy Policy", "retain billing records for seven years"],
+  "summaryIncludes": ["retain billing records for seven years"],
+  "question": "How long are support messages retained?",
+  "answerIncludes": ["eighteen months"]
+}

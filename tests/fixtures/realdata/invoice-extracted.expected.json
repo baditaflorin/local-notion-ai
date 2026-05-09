@@ -1,0 +1,8 @@
+{
+  "kind": "invoice",
+  "minConfidence": 0.75,
+  "normalizedIncludes": ["Invoice # INV-2048", "Total: $5,976.00"],
+  "summaryIncludes": ["Reference: INV-2048.", "Total-like amount: $4,980.00."],
+  "question": "What is the invoice identifier?",
+  "answerIncludes": ["INV-2048"]
+}

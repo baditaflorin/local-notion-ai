@@ -19,7 +19,7 @@ test("imports a document and runs local Q&A", async ({ page }) => {
   await expect(page.getByText(/GitHub/i).last()).toBeVisible();
 
   await page.setInputFiles(
-    "input[accept='.txt,.md,.markdown,.csv,.json,.html']",
+    "input[accept='.txt,.md,.markdown,.csv,.json,.html,.eml']",
     path.join(process.cwd(), "tests/fixtures/import-note.md")
   );
   await page.getByLabel("Search local documents").fill("");

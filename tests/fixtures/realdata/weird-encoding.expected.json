@@ -1,0 +1,13 @@
+{
+  "kind": "note",
+  "minConfidence": 0.5,
+  "normalizedIncludes": [
+    "\"Customer note\"",
+    "Order ID: AB-4421",
+    "café shipment - the label says \"fragile\""
+  ],
+  "warningsIncludeCodes": ["encoding-normalized"],
+  "summaryIncludes": ["Order ID: AB-4421"],
+  "question": "What is the order ID?",
+  "answerIncludes": ["AB-4421"]
+}

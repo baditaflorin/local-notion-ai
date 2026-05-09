@@ -1,6 +1,7 @@
 import { del, get, set } from "idb-keyval";
 import * as Y from "yjs";
-import { countWords } from "../text/text";
+import { stableHash } from "../text/text";
+import { reanalyzeDocument } from "../../features/analysis/documentAnalysis";
 import type { DocumentRecord, ExportBundle, WorkspaceSnapshot } from "../../shared/types";
 
 const STORAGE_KEY = "local-notion-ai:yjs-update:v1";
@@ -27,6 +28,11 @@ export class WorkspaceStore {
     const stored = await get<Uint8Array | number[]>(STORAGE_KEY);
     if (stored) {
       Y.applyUpdate(this.ydoc, stored instanceof Uint8Array ? stored : Uint8Array.from(stored));
+      this.ydoc.transact(() => {
+        for (const [id, document] of this.documents.entries()) {
+          this.documents.set(id, reanalyzeDocument(document));
+        }
+      });
     }
 
     return this.snapshot();
@@ -53,12 +59,10 @@ export class WorkspaceStore {
   }
 
   upsertDocument(document: DocumentRecord, makeActive = true): void {
-    const content = document.content;
-    const updatedDocument = {
+    const updatedDocument = reanalyzeDocument({
       ...document,
-      wordCount: countWords(content),
       updatedAt: new Date().toISOString()
-    };
+    });
 
     this.ydoc.transact(() => {
       this.documents.set(updatedDocument.id, updatedDocument);
@@ -76,7 +80,7 @@ export class WorkspaceStore {
 
     this.ydoc.transact(() => {
       for (const document of documents) {
-        this.documents.set(document.id, document);
+        this.documents.set(document.id, reanalyzeDocument(document));
       }
       this.meta.set(META_ACTIVE_ID, documents[documents.length - 1]?.id ?? documents[0]?.id);
       this.meta.set(META_UPDATED_AT, new Date().toISOString());
@@ -113,18 +117,30 @@ export class WorkspaceStore {
     await del(STORAGE_KEY);
   }
 
-  exportBundle(): ExportBundle {
+  exportBundle(build: { version: string; commit: string }): ExportBundle {
+    const documents = this.snapshot().documents;
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: new Date().toISOString(),
-      documents: this.snapshot().documents
+      appVersion: build.version,
+      appCommit: build.commit,
+      exportDigest: stableHash(
+        JSON.stringify(
+          documents.map((document) => ({
+            id: document.id,
+            digest: document.analysis?.sourceDigest ?? document.id,
+            updatedAt: document.updatedAt
+          }))
+        )
+      ),
+      documents
     };
   }
 
   importBundle(bundle: ExportBundle): void {
     this.ydoc.transact(() => {
       for (const document of bundle.documents) {
-        this.documents.set(document.id, document);
+        this.documents.set(document.id, reanalyzeDocument(document));
       }
       this.meta.set(META_ACTIVE_ID, bundle.documents[0]?.id ?? "");
       this.meta.set(META_UPDATED_AT, new Date().toISOString());

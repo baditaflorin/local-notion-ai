@@ -11,3 +11,4 @@ docs/manifest.webmanifest
 docs/icon.svg
 docs/version.json
 package-lock.json
+tests/fixtures/realdata/broken-export.json

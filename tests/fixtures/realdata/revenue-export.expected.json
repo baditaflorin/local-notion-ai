@@ -1,0 +1,8 @@
+{
+  "kind": "csv",
+  "minConfidence": 0.85,
+  "normalizedIncludes": ["columns | month | region | revenue_usd | owner", "row_count | 4"],
+  "summaryIncludes": ["Table shape: month | region | revenue_usd | owner.", "Row count: 4."],
+  "question": "Who owns the West region?",
+  "answerIncludes": ["West", "M. Singh"]
+}

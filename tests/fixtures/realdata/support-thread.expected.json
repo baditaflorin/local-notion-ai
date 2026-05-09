@@ -1,0 +1,8 @@
+{
+  "kind": "email",
+  "minConfidence": 0.75,
+  "normalizedIncludes": ["Subject: Refund still missing", "Please confirm the transfer date"],
+  "summaryIncludes": ["Subject: Refund still missing.", "Latest requests:"],
+  "question": "What does Dana want confirmed?",
+  "answerIncludes": ["refund", "transfer date"]
+}

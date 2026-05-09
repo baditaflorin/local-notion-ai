@@ -1,0 +1,8 @@
+{
+  "kind": "note",
+  "minConfidence": 0.5,
+  "normalizedIncludes": ["North warehouse pilot", "Austin warehouse pilot"],
+  "summaryIncludes": ["vendor firmware", "risk register"],
+  "question": "What is blocking Austin?",
+  "answerIncludes": ["vendor firmware", "maintenance window"]
+}

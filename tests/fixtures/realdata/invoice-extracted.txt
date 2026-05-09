@@ -1,0 +1,8 @@
+Invoice # INV-2048
+Bill To: FreshCart Distribution
+Issue Date: 2026-04-12
+Subtotal: $4,980.00
+Tax: $996.00
+Total: $5,976.00
+Please pay within 14 days.
+

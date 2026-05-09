@@ -1,0 +1,11 @@
+{
+  "kind": "transcript",
+  "minConfidence": 0.8,
+  "normalizedIncludes": [
+    "Maya: Thanks everyone.",
+    "Action item - Leo follows up with the vendor by Friday."
+  ],
+  "summaryIncludes": ["Speakers: Maya, Leo, Priya.", "Potential actions:"],
+  "question": "Who owns the vendor follow-up?",
+  "answerIncludes": ["Leo", "vendor"]
+}
