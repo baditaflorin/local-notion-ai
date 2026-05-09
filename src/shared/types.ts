@@ -92,6 +92,8 @@ export type SearchResult = {
   confidenceLabel?: ConfidenceLevel;
 };
 
+export type AiMode = "summary" | "rewrite" | "qa";
+
 export type RewriteStyle = "clear" | "short" | "polished";
 
 export type Citation = {
