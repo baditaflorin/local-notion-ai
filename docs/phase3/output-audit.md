@@ -31,3 +31,20 @@ Status key: green = works end-to-end; yellow = partial; red = missing/broken; gr
 | Print/PDF view          | green         | Print action opens/prints a deterministic report for the current AI result.                           |
 | Screenshot/export image | gray          | Out of scope in ADR 0062.                                                                             |
 | Embed code/API/curl     | gray          | Out of scope in ADR 0062 for Mode A.                                                                  |
+
+## After Implementation
+
+| Output pathway          | Status | Evidence                                                                    |
+| ----------------------- | ------ | --------------------------------------------------------------------------- |
+| JSON workspace export   | green  | Header JSON export still downloads `ExportBundle` v2.                       |
+| JSON restore round-trip | green  | Existing unit coverage plus share-state validation use the same parser.     |
+| CSV export              | green  | `documentsToCsv` is deterministic and covered by unit plus smoke download.  |
+| Copy AI result          | green  | AI output copy uses clipboard with fallback error guidance.                 |
+| Copy workspace/report   | green  | Report text includes version, commit, confidence, explanation, citations.   |
+| Shareable URL           | green  | `shareUrlForBundle` validates size and `decodeShareHash` restores bundles.  |
+| Downloadable state file | green  | JSON remains canonical state and README documents it.                       |
+| Print/PDF view          | green  | Print action opens a deterministic report window for the current AI output. |
+| Screenshot/export image | gray   | Explicitly out of scope.                                                    |
+| Embed code/API/curl     | gray   | Explicitly out of scope for Mode A.                                         |
+
+Final count: 8 green, 2 gray, 0 yellow, 0 red.

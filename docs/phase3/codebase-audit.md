@@ -51,3 +51,20 @@ The only matches are fixture content (`console.log("analytics")` inside a real H
 - No tests for settings persistence because settings do not exist.
 - No tests for hash share-state encoding/decoding because share links do not exist.
 - E2E smoke covers happy path only; it does not exercise paste, drag/drop, CSV, copy, share, or settings.
+
+## After Implementation
+
+| Metric                          | Before                        | After                                                                                              |
+| ------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| Source TODO/FIXME/XXX/HACK      | 0                             | 0                                                                                                  |
+| `any` / `@ts-ignore`            | 0                             | 0                                                                                                  |
+| Unsafe casts outside boundaries | 2                             | 0 known; remaining casts attach `ImportError.detail` at the import boundary and one literal tuple. |
+| Real-data fixture tests         | 10                            | 10 passing                                                                                         |
+| Unit tests                      | 18                            | 24 passing                                                                                         |
+| E2E smoke coverage              | Sample + file import + Q&A    | Sample + file import + paste import + Q&A + CSV export                                             |
+| App shell size                  | 780 lines before Phase 3 work | 1,035 lines, with workspace panels and export/share/settings logic split out                       |
+
+## Remaining Accepted Debt
+
+- `src/App.tsx` remains large because it coordinates browser events and application state. The heaviest presentational panels were split into `workspaceComponents.tsx`; a deeper event-handler decomposition is a Phase 4 candidate.
+- `ImportError.detail` uses a localized cast to attach structured domain errors to native `Error`. ADR 0069 permits this boundary pattern.

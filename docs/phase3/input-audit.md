@@ -37,3 +37,23 @@ Status key: green = works end-to-end on real user data; yellow = works partially
 | Exported state restore   | green         | Restore remains schema-validated.                                                                        |
 | Deep link/imported state | green         | Small workspaces can load from a hash state link.                                                        |
 | Autosave restore         | green         | Clear-state control remains the escape hatch.                                                            |
+
+## After Implementation
+
+| Input pathway            | Status | Evidence                                                              |
+| ------------------------ | ------ | --------------------------------------------------------------------- |
+| File upload              | green  | Existing file input remains covered by Playwright smoke.              |
+| Multi-file import        | green  | `documentsFromFilesPartial` imports valid files and reports failures. |
+| Mobile file picker       | green  | Native file input remains supported; README documents static limits.  |
+| Drag and drop            | green  | App root accepts dropped files and dropped text.                      |
+| Paste plain text/HTML    | green  | Paste box imports copied content; Playwright smoke covers it.         |
+| Clipboard read           | green  | Clipboard button imports text or gives a paste fallback on denial.    |
+| URL input                | green  | CORS-readable URLs import; blocked URLs explain the paste fallback.   |
+| Image paste/import       | gray   | Explicitly out of scope in ADR 0061 and README limitations.           |
+| Folder import            | gray   | Explicitly out of scope in ADR 0061 and README limitations.           |
+| Sample/demo loader       | green  | Empty-state sample loader remains available.                          |
+| Exported state restore   | green  | Existing restore remains schema-validated.                            |
+| Deep link/imported state | green  | `#state=` hash links decode and import validated bundles.             |
+| Autosave restore         | green  | Yjs/IndexedDB restore remains unchanged.                              |
+
+Final count: 11 green, 2 gray, 0 yellow, 0 red.

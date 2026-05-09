@@ -30,3 +30,15 @@
 3. Debug surface claim is true only for the current session.
 4. There is no honest URL/CORS guidance despite users naturally bringing URLs.
 5. There is no tested claim for CSV export, copy, share, or print because those outputs do not exist yet.
+
+## After Implementation
+
+| Claim                                     | Status                             | Evidence                                                                                           |
+| ----------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Offline-first local summarize/rewrite/Q&A | shipped fully                      | No runtime backend added; tests pass.                                                              |
+| Bring your own data                       | shipped fully for text-like inputs | File, multi-file, drag/drop, paste, clipboard, URL, JSON restore, share links, autosave are wired. |
+| Take work out                             | shipped fully for scoped outputs   | JSON, CSV, copy, share link, and print report are wired.                                           |
+| Settings are real                         | shipped fully                      | Settings persist through a zod-validated localStorage schema.                                      |
+| README limitations are honest             | shipped fully                      | OCR, folder import, backend proxy, accounts, API, and large share-link limits are documented.      |
+
+Remaining mismatch count: 0 known.

@@ -57,3 +57,11 @@
 - Runtime backend, accounts, collaboration, cross-device sync, or server-side URL proxying.
 - New AI engine capabilities beyond Phase 2 substance behavior.
 - Visual polish work unrelated to completing real input/output/control paths.
+
+## After Implementation Summary
+
+- Input rows: 11 green, 2 gray, 0 yellow, 0 red.
+- Output rows: 8 green, 2 gray, 0 yellow, 0 red.
+- Control groups: 9 green, 0 yellow, 0 red.
+- Codebase health: 0 TODO/FIXME/XXX/HACK, 0 `any`, 0 `@ts-ignore`, and unsafe casts removed outside the import-error boundary.
+- New tests: settings persistence, share state, CSV/report export, partial import, validated real-data expectations, and Playwright paste/CSV smoke.

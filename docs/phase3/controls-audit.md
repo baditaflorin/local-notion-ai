@@ -39,3 +39,19 @@ Status key: green = handler does what the label says on real data; yellow = hand
 | Settings                      | green         | Every setting persists and changes behavior.                      |
 | Paste/clipboard/URL/drag-drop | green         | Each imports through the real analyzer.                           |
 | Share/copy/CSV/print          | green         | Each produces a real artifact or actionable failure.              |
+
+## After Implementation
+
+| Control group                        | Status | Evidence                                                         |
+| ------------------------------------ | ------ | ---------------------------------------------------------------- |
+| Import, restore, export JSON         | green  | Existing handlers retained; tests still pass.                    |
+| Partial multi-file import            | green  | Unit test proves one empty file no longer blocks a valid file.   |
+| Paste, clipboard, URL, drag/drop     | green  | Handlers create documents or actionable browser-boundary errors. |
+| Search, row selection, edit, remove  | green  | Existing workspace flow retained and smoke still passes.         |
+| AI mode, style, question, run        | green  | Existing local NLP flow retained and smoke still passes.         |
+| Copy AI, print AI, CSV export, share | green  | New controls call real output helpers; CSV is smoke-tested.      |
+| Debug surface                        | green  | Header toggle works; setting can make debug default on load.     |
+| Settings                             | green  | Three settings persist and each changes behavior.                |
+| Clear local data                     | green  | Clears workspace, AI output, and hash share state.               |
+
+Final count: 9 green groups, 0 yellow, 0 red.
