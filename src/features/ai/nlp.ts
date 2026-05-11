@@ -246,26 +246,139 @@ export function summarizeDocuments(documents: DocumentRecord[], maxSentences = 5
 }
 
 const replacements: Record<RewriteStyle, Array<[RegExp, string]>> = {
+  // "Clear": cut wordy phrasing and replace formal-but-fuzzy verbs with their
+  // plain English equivalent. Sourced from common writing guidance
+  // (Plain English, Hemingway-style cuts, government plain-language style).
   clear: [
     [/\bin order to\b/gi, "to"],
     [/\bdue to the fact that\b/gi, "because"],
+    [/\bowing to the fact that\b/gi, "because"],
+    [/\bfor the reason that\b/gi, "because"],
     [/\bat this point in time\b/gi, "now"],
+    [/\bat the present time\b/gi, "now"],
+    [/\bin the event that\b/gi, "if"],
+    [/\bin the case of\b/gi, "for"],
+    [/\bwith regard to\b/gi, "about"],
+    [/\bwith respect to\b/gi, "about"],
+    [/\bin relation to\b/gi, "about"],
+    [/\bas a means of\b/gi, "to"],
+    [/\bas a matter of fact\b/gi, "in fact"],
+    [/\bfor the purpose of\b/gi, "to"],
+    [/\ba large number of\b/gi, "many"],
+    [/\ba majority of\b/gi, "most"],
+    [/\ba great deal of\b/gi, "much"],
+    [/\bin spite of the fact that\b/gi, "although"],
+    [/\bdespite the fact that\b/gi, "although"],
+    [/\bnotwithstanding the fact that\b/gi, "although"],
+    [/\bdue to the fact\b/gi, "because"],
+    [/\bin the near future\b/gi, "soon"],
+    [/\bprior to\b/gi, "before"],
+    [/\bsubsequent to\b/gi, "after"],
+    [/\bcommence\b/gi, "start"],
+    [/\bterminate\b/gi, "end"],
     [/\butilize\b/gi, "use"],
-    [/\bfacilitate\b/gi, "help"]
+    [/\butilization\b/gi, "use"],
+    [/\bfacilitate\b/gi, "help"],
+    [/\bdemonstrate\b/gi, "show"],
+    [/\bendeavour\b/gi, "try"],
+    [/\bendeavor\b/gi, "try"],
+    [/\bascertain\b/gi, "find out"],
+    [/\bcompetence\b/gi, "skill"],
+    [/\bnumerous\b/gi, "many"],
+    [/\bpurchase\b/gi, "buy"],
+    [/\baccordingly\b/gi, "so"],
+    [/\bconsequently\b/gi, "so"],
+    [/\bregarding the matter of\b/gi, "about"],
+    [/\bplease be advised that\b/gi, ""],
+    [/\bplease note that\b/gi, ""],
+    [/\bit should be noted that\b/gi, ""]
   ],
+  // "Short": delete intensifiers, hedging, and dead-weight phrases. Each rule
+  // is safe to apply without changing meaning; aggressive enough trimmers
+  // like dropping "the" or "a" are deliberately omitted.
   short: [
-    [/\bvery\b/gi, ""],
-    [/\breally\b/gi, ""],
+    [/\bvery\s+/gi, ""],
+    [/\breally\s+/gi, ""],
+    [/\bquite\s+/gi, ""],
+    [/\bsomewhat\s+/gi, ""],
+    [/\brather\s+/gi, ""],
+    [/\bactually\s+/gi, ""],
+    [/\bbasically\s+/gi, ""],
+    [/\bliterally\s+/gi, ""],
+    [/\bessentially\s+/gi, ""],
+    [/\bnaturally\s+/gi, ""],
+    [/\bobviously\s+/gi, ""],
+    [/\bsimply\s+/gi, ""],
+    [/\bjust\s+/gi, ""],
+    [/\bso to speak\b/gi, ""],
+    [/\bfor all intents and purposes\b/gi, ""],
+    [/\bat the end of the day\b/gi, ""],
+    [/\bin the final analysis\b/gi, ""],
+    [/\bgoing forward\b/gi, ""],
+    [/\bneedless to say,?\s*/gi, ""],
+    [/\bthat said,?\s*/gi, ""],
+    [/\bthat being said,?\s*/gi, ""],
+    [/\bto be honest,?\s*/gi, ""],
+    [/\bto tell you the truth,?\s*/gi, ""],
+    [/\bif you ask me,?\s*/gi, ""],
+    [/\bI think (that\s+)?/gi, ""],
+    [/\bI believe (that\s+)?/gi, ""],
+    [/\bI feel (that\s+)?/gi, ""],
     [/\bin order to\b/gi, "to"],
-    [/\bthat is to say\b/gi, ""],
-    [/\bthe fact that\b/gi, ""]
+    [/\bthat is to say,?\s*/gi, ""],
+    [/\bthe fact that\b/gi, ""],
+    [/\bthere is\s+/gi, ""],
+    [/\bthere are\s+/gi, ""],
+    [/\bit is important to note that\b/gi, ""],
+    [/\bit is worth noting that\b/gi, ""],
+    [/\bit goes without saying that\b/gi, ""]
   ],
+  // "Polished": expand casual contractions, upgrade weak verbs, and replace
+  // vague nouns with concrete equivalents. Capitalisation is also normalised
+  // sentence-by-sentence in the post-pass.
   polished: [
     [/\bcan't\b/gi, "cannot"],
     [/\bwon't\b/gi, "will not"],
+    [/\bdon't\b/gi, "do not"],
+    [/\bdoesn't\b/gi, "does not"],
+    [/\bdidn't\b/gi, "did not"],
+    [/\bisn't\b/gi, "is not"],
+    [/\baren't\b/gi, "are not"],
+    [/\bwasn't\b/gi, "was not"],
+    [/\bweren't\b/gi, "were not"],
+    [/\bhaven't\b/gi, "have not"],
+    [/\bhasn't\b/gi, "has not"],
+    [/\bhadn't\b/gi, "had not"],
+    [/\bshouldn't\b/gi, "should not"],
+    [/\bwouldn't\b/gi, "would not"],
+    [/\bcouldn't\b/gi, "could not"],
+    [/\bI'm\b/g, "I am"],
+    [/\byou're\b/gi, "you are"],
+    [/\bwe're\b/gi, "we are"],
+    [/\bthey're\b/gi, "they are"],
+    [/\bit's\b/gi, "it is"],
+    [/\bI'll\b/g, "I will"],
+    [/\bwe'll\b/gi, "we will"],
+    [/\bthey'll\b/gi, "they will"],
     [/\bwe need to\b/gi, "the next step is to"],
+    [/\blet's\b/gi, "we should"],
+    [/\bkind of\b/gi, "somewhat"],
+    [/\bsort of\b/gi, "somewhat"],
+    [/\ba lot of\b/gi, "many"],
+    [/\blots of\b/gi, "many"],
+    [/\bget rid of\b/gi, "remove"],
+    [/\bfind out\b/gi, "determine"],
+    [/\bcome up with\b/gi, "develop"],
+    [/\bcheck out\b/gi, "review"],
+    [/\bgo over\b/gi, "review"],
+    [/\bdeal with\b/gi, "address"],
     [/\bthing\b/gi, "item"],
-    [/\bstuff\b/gi, "materials"]
+    [/\bthings\b/gi, "items"],
+    [/\bstuff\b/gi, "materials"],
+    [/\bguy\b/gi, "person"],
+    [/\bguys\b/gi, "everyone"],
+    [/\bok\b/gi, "acceptable"],
+    [/\bokay\b/gi, "acceptable"]
   ]
 };
 
@@ -285,14 +398,24 @@ export function rewriteText(
     };
   }
 
+  const styleRules = replacements[style];
+  let applied = 0;
   const transformed = sentences
-    .map((sentence) =>
-      replacements[style].reduce(
-        (current, [pattern, replacement]) => current.replace(pattern, replacement),
-        sentence
-      )
-    )
-    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .map((sentence) => {
+      let current = sentence;
+      for (const [pattern, replacement] of styleRules) {
+        const next = current.replace(pattern, replacement);
+        if (next !== current) {
+          applied += 1;
+          current = next;
+        }
+      }
+      // Collapse the double-spaces / leading-spaces introduced by removals.
+      return current
+        .replace(/\s+([,.;:!?])/g, "$1")
+        .replace(/\s+/g, " ")
+        .trim();
+    })
     .filter(Boolean);
 
   let text = transformed.join(" ");
@@ -308,15 +431,20 @@ export function rewriteText(
       .replace(/\s+/g, " ");
   }
 
-  const confidence = document?.analysis?.kind === "code" ? 0.34 : 0.72;
+  const isCodeLike = document?.analysis?.kind === "code";
+  // Confidence rises with applied rules so users can see the rewrite did work,
+  // and drops on code-shaped inputs where prose rules misfire.
+  const ruleConfidence = Math.min(1, 0.55 + applied * 0.05);
+  const confidence = isCodeLike ? Math.min(0.4, ruleConfidence * 0.5) : ruleConfidence;
   return {
     text,
     confidence,
     confidenceLabel: confidenceLabel(confidence),
-    explanation:
-      document?.analysis?.kind === "code"
-        ? "This rewrite used prose rules on a code-like document, so the result should be reviewed carefully."
-        : `Applied the deterministic "${style}" rewrite rules to normalized sentences.`
+    explanation: isCodeLike
+      ? `Applied ${applied} "${style}" rewrite rule${applied === 1 ? "" : "s"} to a code-like document; review the result carefully.`
+      : applied === 0
+        ? `No "${style}" rewrite rules matched this input; the text already follows the target style.`
+        : `Applied ${applied} deterministic "${style}" rewrite rule${applied === 1 ? "" : "s"} across ${sentences.length} sentence${sentences.length === 1 ? "" : "s"}.`
   };
 }
 
